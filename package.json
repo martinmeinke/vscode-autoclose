@@ -3,6 +3,7 @@
 	"displayName": "autoclose",
 	"description": "Automatically close tabs that have not been activated in some time",
 	"version": "0.0.1",
+	"icon": "images/simbafoot.png",
 	"publisher": "martinmeinke",
 	"repository": "https://github.com/martinmeinke/vscode-autoclose.git",
 	"engines": {
