@@ -1,4 +1,3 @@
-import { table } from "console";
 import * as vscode from "vscode";
 import { TabInputText } from 'vscode';
 let timers: { [document_uri: string]: NodeJS.Timeout } = {};
