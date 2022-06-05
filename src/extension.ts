@@ -1,91 +1,72 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import { table } from "console";
 import * as vscode from "vscode";
-
+import { TabInputText } from 'vscode';
 let timers: { [document_uri: string]: NodeJS.Timeout } = {};
-
 
 function nowSeconds(): number {
   return (Date.now() / 1000) | 0;
 }
 
-
 function closeTab(tab: vscode.Tab): void {
-  console.log("Close document: " + tab.resource?.fsPath);
-  tab.close();
+
+  const closeDirty = vscode.workspace
+    .getConfiguration()
+    .get("autoclose.closeDirtyEditor");
+
+  if(tab.isDirty && !closeDirty)
+  {
+    return;
+  }
+
+  vscode.window.tabGroups.close(tab).then(success => {
+    if (success) {
+      console.log(`successfully closed tab ${tab.label}`);
+    } else {
+      console.error(`issue closing tab ${tab.label}`);
+    }
+  });
 }
-
-
-// function closeDocument(document: vscode.TextDocument): void {
-//   console.log("Close document: " + document.uri.fsPath);
-
-//   if (document.isClosed) {
-//     return;
-//   }
-
-//   vscode.window
-//     .showTextDocument(document.uri, { preview: true, preserveFocus: false })
-//     .then(() => {
-//       return vscode.commands.executeCommand(
-//         "workbench.action.closeActiveEditor"
-//       );
-//     });
-// }
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
   // Use the console to output diagnostic information (console.log) and errors (console.error)
   // This line of code will only be executed once when your extension is activated
-  console.log('Congratulations, your extension "autoclose" is now active!');
-  console.log("vscode.window.tabs: " + vscode.window.tabs.length);
-  vscode.window.showInformationMessage("keys in workspaceState: " + context.workspaceState.keys());
-  // console.log("keys in workspaceState: " + context.workspaceState.keys());
+  console.log('context.extensionUri: ' + context.extensionUri);
+  for (const tab of vscode.window.tabGroups.all.map(g => g.tabs).flat()) {
 
-  console.log(context.extensionUri);
+    // only close text input tabs
+    if (!(tab.input instanceof TabInputText)) {
+      continue;
+    }
 
-  vscode.window.tabs.forEach((item) => {
-    let key = item.resource?.fsPath;
-    console.log("open Tab: ", key);
-    if (key && key in context.workspaceState) {
+    let key = tab.input.uri.toString();
+    console.log(`open Tab: ${key}`);
+    if (key && context.workspaceState.keys().includes(key)) {
       let lastModified = context.workspaceState.get(key) as number;
       let remainingSec = nowSeconds() - lastModified;
-      console.log("\t remainingSec: ", remainingSec);
+      console.log(`\t remainingSec: ${remainingSec}`);
 
-      if(remainingSec <= 0)
-      {
-        item.close();
-      }else{
+      if (remainingSec <= 0) {
+        closeTab(tab);
+      } else {
         // set timer to remaining seconds
         timers[key] = setTimeout(
           closeTab,
           remainingSec * 1000,
-          item
+          tab
         );
       }
     }
-  });
-
-  // context.subscriptions.push(
-  //   vscode.window.onDidChangeActiveTextEditor((editor) => {
-  //     console.log("onDidChangeActiveTextEditor" + editor?.document.uri.fsPath);
-
-  //     if (editor) {
-  //       resetTimer(context, editor.document);
-  //     }
-  //   })
-  // );
+  }
 
   context.subscriptions.push(
-    vscode.window.onDidChangeActiveTab((tab) => {
-      console.log("onDidChangeActiveTab" + tab?.resource?.fsPath);
-
-      if (tab) {
+    vscode.window.tabGroups.onDidChangeTabs(async tabs => {
+      for (const tab of tabs.changed.filter(tab => tab.input instanceof TabInputText)) {
         resetTimer(context, tab);
       }
     })
-  );
+  )
 }
 
 
@@ -93,20 +74,17 @@ function resetTimer(
   context: vscode.ExtensionContext,
   tab: vscode.Tab
 ): void {
-  let key = tab.resource?.fsPath;
-  console.log("Resetting timer for " + key);
-
+  let key = (tab.input as TabInputText).uri.toString();
   if (key) {
-    console.log("Updating workspaceState for: ", key);
     // set state to last touched
     context.workspaceState.update(
       key,
-      nowSeconds
-    );
+      nowSeconds()
+    ).then(() => console.log('workspaceState updated'), () => console.error('error updating workspaceState'));
 
     // if there is still a timer runing, clear it
     if (key in timers) {
-      console.log("clearing timer for " + key);
+      console.log(`clearing timer for ${key}`);
       clearTimeout(timers[key]);
     }
 
@@ -121,8 +99,7 @@ function resetTimer(
       tab
     );
   }
-  console.log("keys: " + context.workspaceState.keys());
 }
 
 // this method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() { }
